@@ -176,9 +176,10 @@ class ComputeLoss:
         feats, pred_scores, pred_distri = predictions
 
         # TODO adjust TAL/DFL loss for channel dim=1, try to remove permutes -------------------------------------------
-        pred_scores = pred_scores.permute(0, 2, 1).contiguous().float()
-        pred_distri = pred_distri.permute(0, 2, 1).contiguous().float()
-        feats = [x.float() for x in feats]
+        pred_scores = pred_scores.permute(0, 2, 1).contiguous()
+        pred_distri = pred_distri.permute(0, 2, 1).contiguous()
+        # feats = [x.float() for x in feats]
+        targets = targets.type(pred_scores.dtype)
 
         batch_size, grid_size = pred_scores.shape[:2]
         imgsz = torch.tensor(feats[0].shape[2:], device=self.device) * self.stride[0]  # image size (h,w)
