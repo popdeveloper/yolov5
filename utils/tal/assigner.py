@@ -38,8 +38,7 @@ def select_highest_overlaps(mask_pos, overlaps, n_max_boxes):
     if fg_mask.max() > 1:  # one anchor is assigned to multiple gt_bboxes
         mask_multi_gts = (fg_mask.unsqueeze(1) > 1).repeat([1, n_max_boxes, 1])  # (b, n_max_boxes, h*w)
         max_overlaps_idx = overlaps.argmax(1)  # (b, h*w)
-        is_max_overlaps = F.one_hot(max_overlaps_idx, n_max_boxes)  # (b, h*w, n_max_boxes)
-        is_max_overlaps = is_max_overlaps.permute(0, 2, 1).to(overlaps.dtype)  # (b, n_max_boxes, h*w)
+        is_max_overlaps = F.one_hot(max_overlaps_idx, n_max_boxes).permute(0, 2, 1)  # (b, n_max_boxes, h*w)
         mask_pos = torch.where(mask_multi_gts, is_max_overlaps, mask_pos)  # (b, n_max_boxes, h*w)
         fg_mask = mask_pos.sum(-2)
     # find each grid serve which gt(index)
@@ -149,8 +148,8 @@ class TaskAlignedAssigner(nn.Module):
         # assigned topk should be unique, this is for dealing with empty labels
         # since empty labels will generate index `0` through `F.one_hot`
         # NOTE: but what if the topk_idxs include `0`?
-        is_in_topk = torch.where(is_in_topk > 1, 0, is_in_topk)
-        return is_in_topk.to(metrics.dtype)
+        return torch.where(is_in_topk > 1, 0, is_in_topk)  # is_in_topk
+
 
     def get_targets(self, gt_labels, gt_bboxes, target_gt_idx, fg_mask):
         """
