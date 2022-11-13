@@ -171,17 +171,17 @@ class ComputeLoss:
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
-    def __call__(self, p, targets, img=None, epoch=0):
+    def __call__(self, predictions, targets):
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
-        feats, pred_scores, pred_distri = p
+        feats, pred_scores, pred_distri = predictions
 
         # TODO adjust TAL/DFL loss for channel dim=1, try to remove permutes -------------------------------------------
-        pred_scores = pred_scores.permute(0, 2, 1).contiguous()
-        pred_distri = pred_distri.permute(0, 2, 1).contiguous()
+        pred_scores = pred_scores.permute(0, 2, 1).contiguous().float()
+        pred_distri = pred_distri.permute(0, 2, 1).contiguous().float()
+        feats = [x.float() for x in feats]
 
-        dtype = pred_scores.dtype
         batch_size, grid_size = pred_scores.shape[:2]
-        imgsz = torch.tensor(feats[0].shape[2:], device=self.device, dtype=dtype) * self.stride[0]  # image size (h,w)
+        imgsz = torch.tensor(feats[0].shape[2:], device=self.device) * self.stride[0]  # image size (h,w)
         anchors, anchor_points, n_anchors_list, stride_tensor = \
             generate_anchors(feats, self.stride, 5.0, 0.5, device=self.device)
 
@@ -196,7 +196,7 @@ class ComputeLoss:
 
         target_labels, target_bboxes, target_scores, fg_mask = self.assigner(
             pred_scores.detach().sigmoid(),
-            (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
+            pred_bboxes.detach() * stride_tensor,
             anchor_points,
             gt_labels,
             gt_bboxes,
@@ -207,11 +207,8 @@ class ComputeLoss:
 
         # cls loss
         # target_labels = F.one_hot(target_labels, self.nc)  # (b, h*w, 80)
-        # loss[1] = self.BCEcls(pred_scores[fg_mask], target_scores[fg_mask].to(dtype))  # BCE
-        # target_labels = torch.where(fg_mask > 0, target_labels, torch.full_like(target_labels, self.nc))
-        # target_labels = F.one_hot(target_labels.long(), self.nc + 1)[..., :-1]
         # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
-        loss[1] = self.BCEcls(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+        loss[1] = self.BCEcls(pred_scores, target_scores).sum() / target_scores_sum  # BCE
 
         # bbox loss
         if fg_mask.sum():

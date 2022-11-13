@@ -11,15 +11,16 @@ def generate_anchors(feats, strides, grid_cell_size=5.0, grid_cell_offset=0.5, d
     anchor_points = []
     stride_tensor = []
     assert feats is not None
+    dtype = feats[0].dtype
     if is_eval:
         for i, stride in enumerate(strides):
             _, _, h, w = feats[i].shape
             sx = torch.arange(end=w, device=device) + grid_cell_offset  # shift x
             sy = torch.arange(end=h, device=device) + grid_cell_offset  # shift y
             sy, sx = torch.meshgrid(sy, sx, indexing='ij') if TORCH_1_10 else torch.meshgrid(sy, sx)
-            anchor_point = torch.stack([sx, sy], -1).to(torch.float)
+            anchor_point = torch.stack([sx, sy], -1).to(dtype)
             anchor_points.append(anchor_point.view(-1, 2))
-            stride_tensor.append(torch.full((h * w, 1), stride, dtype=torch.float, device=device))
+            stride_tensor.append(torch.full((h * w, 1), stride, dtype=dtype, device=device))
         anchor_points = torch.cat(anchor_points)
         stride_tensor = torch.cat(stride_tensor)
         return anchor_points, stride_tensor
@@ -32,15 +33,15 @@ def generate_anchors(feats, strides, grid_cell_size=5.0, grid_cell_offset=0.5, d
             sy = (torch.arange(end=h, device=device) + grid_cell_offset) * stride
             sy, sx = torch.meshgrid(sy, sx, indexing='ij') if TORCH_1_10 else torch.meshgrid(sy, sx)
             anchor = torch.stack([sx - cell_half_size, sy - cell_half_size,
-                                  sx + cell_half_size, sy + cell_half_size], -1).clone().to(feats[0].dtype)
-            anchor_point = torch.stack([sx, sy], -1).clone().to(feats[0].dtype)
+                                  sx + cell_half_size, sy + cell_half_size], -1).clone().to(dtype)
+            anchor_point = torch.stack([sx, sy], -1).clone().to(dtype)
             anchors.append(anchor.view(-1, 4))
             anchor_points.append(anchor_point.view(-1, 2))
             num_anchors_list.append(len(anchors[-1]))
-            stride_tensor.append(torch.full([num_anchors_list[-1], 1], stride, dtype=feats[0].dtype))
+            stride_tensor.append(torch.full([num_anchors_list[-1], 1], stride, dtype=dtype))
         anchors = torch.cat(anchors)
         anchor_points = torch.cat(anchor_points).to(device)
-        stride_tensor = torch.cat(stride_tensor).to(device)
+        stride_tensor = torch.cat(stride_tensor)
         return anchors, anchor_points, num_anchors_list, stride_tensor
 
 
@@ -52,9 +53,8 @@ def dist2bbox(distance, anchor_points, xywh=True, dim=-1):
     if xywh:
         c_xy = (x1y1 + x2y2) / 2
         wh = x2y2 - x1y1
-        return torch.cat((c_xy, wh), dim)  # bbox
-    else:  # xyxy
-        return torch.cat((x1y1, x2y2), dim)  # bbox
+        return torch.cat((c_xy, wh), dim)  # xywh bbox
+    return torch.cat((x1y1, x2y2), dim)  # xyxy bbox
 
 
 def bbox2dist(anchor_points, bbox, reg_max):
